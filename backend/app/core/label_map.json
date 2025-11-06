@@ -88,5 +88,23 @@
         "display": "Ground",
         "group": "power",
         "is_background": false
+    },
+    "10": {
+        "id": 10,
+        "canonical": "current.dc",
+        "cghd": [],
+        "hcd": ["I-DC"],
+        "display": "DC Current",
+        "group": "power",
+        "is_background": false
+    },
+    "11": {
+        "id": 11,
+        "canonical": "current.ac",
+        "cghd": [],
+        "hcd": ["I-AC"],
+        "display": "AC Current",
+        "group": "power",
+        "is_background": false
     }
 }

@@ -17,6 +17,8 @@ Notes:
 import argparse
 import json
 import os
+import sys
+import subprocess
 import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
@@ -261,7 +263,13 @@ def update_manifest(records: List[Dict[str, Any]]):
                 manifest = json.load(f)
         except Exception:
             pass
-    manifest["images"].extend(records)
+    # de-duplicate by (dataset,id)
+    existing = {}
+    for rec in manifest.get("images", []):
+        existing[(rec.get("dataset"), rec.get("id"))] = rec
+    for rec in records:
+        existing[(rec.get("dataset"), rec.get("id"))] = rec
+    manifest["images"] = list(existing.values())
     with open(man_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
@@ -270,13 +278,22 @@ def main():
     parser = argparse.ArgumentParser(description="Unify CGHD & HCD into processed dataset (sample-capable)")
     parser.add_argument("--label-map", default=str(ROOT / "backend/app/core/label_map.json"))
     parser.add_argument("--cghd-xml", help="Path to one CGHD XML to process", required=False)
+    parser.add_argument("--cghd-dir", help="Process ALL CGHD XMLs under this directory (rglob *.xml)", required=False)
     parser.add_argument("--hcd-json", default=str(DATA_DIR / "hcd/Component Symbol and Text Label Data/component_annotations.json"))
     parser.add_argument("--hcd-image", help="HCD image file_name to process (e.g., circuit_639.jpg)")
+    parser.add_argument("--hcd-all", action="store_true", help="Process ALL HCD images listed in the JSON")
+    # Optional preview integration (off by default unless flag set)
+    parser.add_argument("--make-previews", action="store_true", help="After processing, generate previews for processed items")
+    parser.add_argument("--preview-mode", choices=["overlay", "color", "both"], default="both")
+    parser.add_argument("--preview-alpha", type=float, default=0.7)
+    parser.add_argument("--preview-legend", action="store_true")
     args = parser.parse_args()
 
     ensure_dirs()
     lm = load_label_map(Path(args.label_map))
     records_for_manifest = []
+
+    processed_ids: List[str] = []
 
     # CGHD sample
     if args.cghd_xml:
@@ -291,6 +308,28 @@ def main():
             "ann_path": os.path.relpath(ann_p, start=PROCESSED_DIR),
             "split": "train",
         })
+        processed_ids.append(cghd_entry["filename"])
+
+    # CGHD full directory
+    if args.cghd_dir:
+        ann_dir = Path(args.cghd_dir)
+        xml_files = sorted(ann_dir.rglob("*.xml"))
+        for xp in xml_files:
+            try:
+                cghd_entry = parse_cghd_xml(xp)
+                mask, meta = build_mask_and_metadata(cghd_entry, lm)
+                img_p, mask_p, ann_p = save_sample(cghd_entry, mask, meta)
+                records_for_manifest.append({
+                    "id": cghd_entry["filename"],
+                    "dataset": "cghd",
+                    "image_path": os.path.relpath(img_p, start=PROCESSED_DIR),
+                    "mask_path": os.path.relpath(mask_p, start=PROCESSED_DIR),
+                    "ann_path": os.path.relpath(ann_p, start=PROCESSED_DIR),
+                    "split": "train",
+                })
+                processed_ids.append(cghd_entry["filename"])
+            except Exception as e:
+                print(f"[WARN] CGHD parse failed for {xp}: {e}")
 
     # HCD sample
     if args.hcd_image:
@@ -305,6 +344,33 @@ def main():
             "ann_path": os.path.relpath(ann_p, start=PROCESSED_DIR),
             "split": "train",
         })
+        processed_ids.append(hcd_entry["filename"])
+
+    # HCD all
+    if args.hcd_all:
+        try:
+            with open(args.hcd_json, "r", encoding="utf-8") as f:
+                hcd_data = json.load(f)
+            all_files = [img["file_name"] for img in hcd_data.get("images", []) if img.get("file_name")]
+        except Exception as e:
+            print(f"[ERROR] Unable to read HCD json: {e}")
+            all_files = []
+        for fname in all_files:
+            try:
+                hcd_entry = parse_hcd_component_json(Path(args.hcd_json), fname)
+                mask, meta = build_mask_and_metadata(hcd_entry, lm)
+                img_p, mask_p, ann_p = save_sample(hcd_entry, mask, meta)
+                records_for_manifest.append({
+                    "id": hcd_entry["filename"],
+                    "dataset": "hcd",
+                    "image_path": os.path.relpath(img_p, start=PROCESSED_DIR),
+                    "mask_path": os.path.relpath(mask_p, start=PROCESSED_DIR),
+                    "ann_path": os.path.relpath(ann_p, start=PROCESSED_DIR),
+                    "split": "train",
+                })
+                processed_ids.append(hcd_entry["filename"])
+            except Exception as e:
+                print(f"[WARN] HCD parse failed for {fname}: {e}")
 
     if records_for_manifest:
         update_manifest(records_for_manifest)
@@ -312,7 +378,21 @@ def main():
         for r in records_for_manifest:
             print(json.dumps(r, ensure_ascii=False))
     else:
-        print("No samples provided. Use --cghd-xml and/or --hcd-image.")
+        print("No samples provided. Use --cghd-xml/--cghd-dir and/or --hcd-image/--hcd-all.")
+
+    # Optional: generate previews for just-processed ids
+    if records_for_manifest and args.make_previews and processed_ids:
+        try:
+            overlay_script = ROOT / "backend/scripts/make_overlays.py"
+            cmd = [sys.executable, str(overlay_script), "--mode", args.preview_mode, "--alpha", str(args.preview_alpha)]
+            if args.preview_legend:
+                cmd.append("--legend")
+            cmd.append("--ids")
+            cmd.extend(processed_ids)
+            print("Making previews for:", ", ".join(processed_ids[:10]), ("..." if len(processed_ids) > 10 else ""))
+            subprocess.run(cmd, check=True)
+        except Exception as e:
+            print(f"[WARN] Failed to generate previews automatically: {e}")
 
 
 if __name__ == "__main__":
