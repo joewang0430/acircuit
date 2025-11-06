@@ -1,0 +1,92 @@
+{
+    "0": {
+        "id": 0,
+        "canonical": "background",
+        "cghd": ["__background__"],
+        "hcd": [],
+        "display": "Background / Ignore",
+        "group": "other",
+        "is_background": true
+    },
+    "1": {
+        "id": 1,
+        "canonical": "inductor",
+        "cghd": ["inductor"],
+        "hcd": ["Inductor"],
+        "display": "Inductor",
+        "group": "passive",
+        "is_background": false
+    },
+    "2": {
+        "id": 2,
+        "canonical": "diode",
+        "cghd": ["diode"],
+        "hcd": ["Diode"],
+        "display": "Diode",
+        "group": "active",
+        "is_background": false
+    },
+    "3": {
+        "id": 3,
+        "canonical": "diode.zener",
+        "cghd": ["diode.zener"],
+        "hcd": ["Zener Diode"],
+        "display": "Zener Diode",
+        "group": "active",
+        "is_background": false
+    },
+    "4": {
+        "id": 4,
+        "canonical": "resistor",
+        "cghd": ["resistor", "resistor.adjustable"],
+        "hcd": ["Resistor"],
+        "display": "Resistor",
+        "group": "passive",
+        "is_background": false
+    },
+    "5": {
+        "id": 5,
+        "canonical": "capacitor",
+        "cghd": ["capacitor.polarized", "capacitor.unpolarized"],
+        "hcd": ["Capacitor"],
+        "display": "Capacitor",
+        "group": "passive",
+        "is_background": false
+    },
+    "6": {
+        "id": 6,
+        "canonical": "crossover",
+        "cghd": ["crossover"],
+        "hcd": ["Wire Crossover"],
+        "display": "Wire Crossover",
+        "group": "structure",
+        "is_background": false
+    },
+    "7": {
+        "id": 7,
+        "canonical": "voltage.dc",
+        "cghd": ["voltage.dc"],
+        "hcd": ["V-DC"],
+        "display": "DC Voltage",
+        "group": "power",
+        "is_background": false
+    },
+    "8": {
+        "id": 8,
+        "canonical": "voltage.ac",
+        "cghd": ["voltage.ac"],
+        "hcd": ["V-AC"],
+        "display": "AC Voltage",
+        "group": "power",
+        "is_background": false
+    },
+    "9": {
+        "id": 9,
+        "canonical": "gnd",
+        "cghd": ["gnd"],
+        "hcd": ["GND"],
+        "display": "Ground",
+        "group": "power",
+        "is_background": false
+    }
+}
