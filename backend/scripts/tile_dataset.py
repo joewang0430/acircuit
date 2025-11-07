@@ -100,6 +100,8 @@ def main():
     ap.add_argument("--val-ratio", type=float, default=0.1)
     ap.add_argument("--min-foreground-pct", type=float, default=0.0, help="Skip tiles with less than this fraction of non-background pixels (0-1). 0.0 keeps all.")
     ap.add_argument("--limit", type=int, default=0, help="Optional limit on number of parent images to process (for quick tests)")
+    ap.add_argument("--datasets", type=str, default="", help="Comma-separated list of datasets to include (e.g., 'hcd,cghd'). Empty means all.")
+    ap.add_argument("--keep-if-has-ids", type=str, default="", help="Comma-separated class ids; keep a tile regardless of min-foreground-pct if it contains any of these ids (e.g., '10,11').")
     args = ap.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -112,13 +114,28 @@ def main():
     ensure_dir(ann_out_dir)
 
     entries = load_manifest(manifest_path)
+    include_sets = None
+    if args.datasets.strip():
+        include_sets = set([s.strip().lower() for s in args.datasets.split(",") if s.strip()])
+
+    keep_ids: np.ndarray | None = None
+    if args.keep_if_has_ids.strip():
+        try:
+            keep_ids = np.array([int(s) for s in args.keep_if_has_ids.split(",") if s.strip()], dtype=np.int32)
+        except Exception:
+            keep_ids = None
 
     tiles: List[Dict] = []
     processed = 0
+    skipped_low_fg = 0
+    kept_focus = 0
 
     for e in entries:
         parent_id = e.get("id")
         dataset = e.get("dataset", "unknown")
+
+        if include_sets is not None and dataset.lower() not in include_sets:
+            continue
         img_path = PROC_DIR / e["image_path"]
         mask_path = PROC_DIR / e["mask_path"]
 
@@ -150,8 +167,17 @@ def main():
             total = tm_np.size
             fg = int((tm_np != 0).sum())
             fg_pct = fg / float(total) if total else 0.0
-            if args.min_foreground_pct > 0.0 and fg_pct < args.min_foreground_pct:
+            # Check focus-ids presence
+            has_focus = False
+            if keep_ids is not None and keep_ids.size > 0:
+                # fast check with isin
+                has_focus = np.isin(tm_np, keep_ids).any()
+
+            if args.min_foreground_pct > 0.0 and fg_pct < args.min_foreground_pct and not has_focus:
+                skipped_low_fg += 1
                 continue
+            if has_focus and args.min_foreground_pct > 0.0 and fg_pct < args.min_foreground_pct:
+                kept_focus += 1
 
             stem = Path(parent_id).stem
             tile_name = f"{stem}_x{x}_y{y}"
@@ -189,6 +215,10 @@ def main():
         json.dump(tiles_manifest, f, indent=2)
 
     print(f"Tiled {processed} parent images -> {len(tiles)} tiles")
+    if args.min_foreground_pct > 0.0:
+        print(f"Skipped (low foreground): {skipped_low_fg}")
+        if kept_focus > 0:
+            print(f"Kept due to focus ids: {kept_focus}")
     print(f"Tiles written under: {out_dir}")
     print(f"Tiles manifest: {out_manifest}")
 

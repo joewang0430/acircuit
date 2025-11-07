@@ -57,6 +57,8 @@ def color_map() -> Dict[int, np.ndarray]:
         7: np.array([52, 199, 89], dtype=np.uint8),        # V-DC -> green
         8: np.array([175, 82, 222], dtype=np.uint8),       # V-AC -> purple
         9: np.array([47, 79, 79], dtype=np.uint8),         # GND -> dark slate gray
+        10: np.array([160, 82, 45], dtype=np.uint8),       # I-DC -> brown
+        11: np.array([0, 0, 128], dtype=np.uint8),         # I-AC -> navy
     }
     return cmap
 
@@ -73,19 +75,33 @@ def load_label_names() -> Dict[int, str]:
         7: "V-DC",
         8: "V-AC",
         9: "GND",
+        10: "I-DC",
+        11: "I-AC",
     }
     lm_path = ROOT / "backend/app/core/label_map.json"
     try:
         with open(lm_path, "r", encoding="utf-8") as f:
             lm = json.load(f)
-        # Expect format: {"classes": [{"id": int, "name": str}, ...]} or similar
-        by_id = {}
-        classes = lm.get("classes") or lm.get("labels") or []
-        for c in classes:
-            cid = c.get("id")
-            name = c.get("name") or c.get("label")
-            if isinstance(cid, int) and isinstance(name, str):
-                by_id[cid] = name
+        # Support either array-form {"classes": [...]} or dict keyed by ids
+        by_id: Dict[int, str] = {}
+        classes = lm.get("classes") or lm.get("labels")
+        if isinstance(classes, list):
+            for c in classes:
+                cid = c.get("id")
+                # Prefer display, then canonical, then name
+                name = c.get("display") or c.get("canonical") or c.get("name") or c.get("label")
+                if isinstance(cid, int) and isinstance(name, str):
+                    by_id[cid] = name
+        elif isinstance(lm, dict):
+            # dict style: {"0": {...}, "1": {...}}
+            for k, v in lm.items():
+                try:
+                    cid = int(v.get("id", k))
+                except Exception:
+                    continue
+                name = v.get("display") or v.get("canonical") or v.get("name") or v.get("label")
+                if isinstance(name, str):
+                    by_id[cid] = name
         return {**default_names, **by_id}
     except Exception:
         return default_names
