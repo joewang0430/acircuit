@@ -1,0 +1,19 @@
+# Direct (top-level) training dependencies only.
+# Generate locked versions with:  pip-compile backend/requirements.in --output-file backend/requirements.txt
+# Python 3.14 is very new; if wheels fail on another machine, prefer 3.12.
+
+torch
+torchvision
+torchaudio  # optional (audio not required for segmentation, keep if future use)
+segmentation_models_pytorch
+albumentations
+opencv-python-headless
+timm  # encoder backbones for segmentation_models_pytorch
+
+numpy
+scipy
+pillow
+PyYAML
+tqdm
+
+# If you later add logging/metrics libs, append them here (e.g. wandb, tensorboard)
