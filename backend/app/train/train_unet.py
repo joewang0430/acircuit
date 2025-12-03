@@ -70,7 +70,14 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, num_cla
 
 
 def train(args: argparse.Namespace) -> None:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Choose device: CUDA > MPS (Apple Silicon) > CPU
+    if torch.cuda.is_available():
+        device_type = "cuda"
+    elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        device_type = "mps"
+    else:
+        device_type = "cpu"
+    device = torch.device(device_type)
     manifest = Path(args.manifest)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -91,7 +98,9 @@ def train(args: argparse.Namespace) -> None:
     class_weights = class_weights.to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
+    # AMP: enable GradScaler only for CUDA; use torch.autocast for MPS if requested
+    use_amp = bool(args.amp)
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp and device_type == "cuda")
 
     best_val = -math.inf
     history = []
@@ -104,15 +113,29 @@ def train(args: argparse.Namespace) -> None:
             images = images.to(device)
             masks = masks.to(device)
             optimizer.zero_grad(set_to_none=True)
-            with torch.cuda.amp.autocast(enabled=args.amp):
+            # Autocast context per device
+            if use_amp and device_type == "cuda":
+                amp_ctx = torch.cuda.amp.autocast()
+            elif use_amp and device_type == "mps":
+                amp_ctx = torch.autocast(device_type="mps", dtype=torch.float16)
+            else:
+                from contextlib import nullcontext
+                amp_ctx = nullcontext()
+
+            with amp_ctx:
                 logits = model(images)
                 if args.focal:
                     loss = focal_ce_loss(logits, masks, gamma=2.0, weight=class_weights)
                 else:
                     loss = nn.functional.cross_entropy(logits, masks, weight=class_weights)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
             running_loss += loss.item() * images.size(0)
             step += 1
             if args.train_steps and step >= args.train_steps:
