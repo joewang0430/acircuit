@@ -1,10 +1,4 @@
-"""Minimal training script for the 12-class U-Net on tiles.
-
-Usage (after installing dependencies):
-  python backend/app/train/train_unet.py \
-    --manifest data/processed/tiles/annotations/tiles_manifest.json \
-    --epochs 5 --batch-size 16 --lr 3e-4 --out-dir runs/unet_baseline
-"""
+# mdified 12.16, but parameters remain same.
 
 from __future__ import annotations
 
