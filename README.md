@@ -22,7 +22,7 @@ This repo contains data processing scripts, training code, and models for circui
 
 - `.vscode/`, `.idea/`: Editor/IDE settings (optional).
 
-Quick notes
+Quick notes:
 - Use `backend/app/train/train_unet.py` for segmentation training with the tiles manifest.
 - Pin heatmap model is in `backend/app/models/pin_unet.py` with helpers for Gaussian target and argmax prediction.
 - Data tiling and split manifests are under `data/processed/tiles/annotations/`.
